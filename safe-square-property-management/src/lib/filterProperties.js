@@ -23,7 +23,10 @@ export function applyFilters(list, f) {
 
   return list.filter((p) => {
     if (q) {
-      const hay = `${p.title} ${p.owner_name} ${p.location} ${p.address}`.toLowerCase();
+      const hay = [p.title, p.owner_name, p.owner_phone, p.additional_contact_number, p.location, p.address]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (f.type !== "all" && p.property_type !== f.type) return false;

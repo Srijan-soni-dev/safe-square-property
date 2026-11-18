@@ -20,11 +20,20 @@ export default function EditPropertyPage() {
   const toast = useToast();
   const { property, loading, error, reload } = useProperty(id);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState({});
 
-  async function handleSubmit(values, { keptImages, files }) {
+  async function handleSubmit(values, { keptMedia, newItems }) {
     setSubmitting(true);
+    setProgress({});
     try {
-      await updateProperty({ userId: user.id, property, values, keptImages, files });
+      await updateProperty({
+        userId: user.id,
+        property,
+        values,
+        keptMedia,
+        items: newItems,
+        onProgress: (itemId, pct) => setProgress((p) => ({ ...p, [itemId]: pct })),
+      });
       toast.success("Property updated");
       navigate(`/properties/${property.id}`, { replace: true });
     } catch (e) {
@@ -47,7 +56,7 @@ export default function EditPropertyPage() {
           </EmptyState>
         </div>
       ) : (
-        <PropertyForm property={property} onSubmit={handleSubmit} submitting={submitting} submitLabel="Save changes" />
+        <PropertyForm property={property} onSubmit={handleSubmit} submitting={submitting} submitLabel="Save changes" uploadProgress={progress} />
       )}
     </div>
   );

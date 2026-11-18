@@ -12,11 +12,18 @@ export default function AddPropertyPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState({});
 
-  async function handleSubmit(values, { files }) {
+  async function handleSubmit(values, { newItems }) {
     setSubmitting(true);
+    setProgress({});
     try {
-      const created = await createProperty({ userId: user.id, values, files });
+      const created = await createProperty({
+        userId: user.id,
+        values,
+        items: newItems,
+        onProgress: (id, pct) => setProgress((p) => ({ ...p, [id]: pct })),
+      });
       toast.success("Property added");
       navigate(`/properties/${created.id}`, { replace: true });
     } catch (e) {
@@ -27,8 +34,8 @@ export default function AddPropertyPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="Add property" description="Fill in the details and add photos." />
-      <PropertyForm onSubmit={handleSubmit} submitting={submitting} submitLabel="Save property" />
+      <PageHeader title="Add property" description="Fill in the details and add photos or videos." />
+      <PropertyForm onSubmit={handleSubmit} submitting={submitting} submitLabel="Save property" uploadProgress={progress} />
     </div>
   );
 }

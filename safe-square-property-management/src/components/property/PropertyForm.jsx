@@ -2,16 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, Shield } from "lucide-react";
 import FormField from "@/components/common/FormField";
-import ImageUploader from "@/components/property/ImageUploader";
+import AmenitiesSection from "@/components/property/AmenitiesSection";
+import LocationCapture from "@/components/property/LocationCapture";
+import MediaUploader from "@/components/property/MediaUploader";
+import NearbySection from "@/components/property/NearbySection";
+import ToggleField from "@/components/property/ToggleField";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ACCEPTED_IMAGE_TYPES, MAX_IMAGES, MAX_IMAGE_SIZE_MB, PROPERTY_STATUSES, PROPERTY_TYPES } from "@/lib/constants";
+import { MAX_MEDIA_FILES, PROPERTY_STATUSES, PROPERTY_TYPES } from "@/lib/constants";
 import { formatPriceShort } from "@/lib/format";
+import { getMediaList, validateMediaFile } from "@/lib/media";
 import { emptyPropertyValues, propertySchema } from "@/schemas/propertySchema";
 import { toFormValues } from "@/services/propertyService";
 
@@ -27,21 +32,26 @@ function Section({ title, description, children }) {
   );
 }
 
-/** Shared by Add and Edit. onSubmit(values, { keptImages, files }) */
-export default function PropertyForm({ property, onSubmit, submitting, submitLabel }) {
+/**
+ * Shared by Add and Edit.
+ * onSubmit(values, { keptMedia: [{url,type}], newItems: [{id,file,mime,kind}] })
+ */
+export default function PropertyForm({ property, onSubmit, submitting, submitLabel, uploadProgress }) {
   const {
     register,
     handleSubmit,
     watch,
+    control,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(propertySchema),
     defaultValues: property ? toFormValues(property) : emptyPropertyValues,
   });
 
-  const [kept, setKept] = useState(property?.images ?? []);
+  const [kept, setKept] = useState(() => getMediaList(property));
   const [newItems, setNewItems] = useState([]);
-  const [imageError, setImageError] = useState("");
+  const [mediaError, setMediaError] = useState("");
 
   const itemsRef = useRef(newItems);
   itemsRef.current = newItems;
@@ -52,24 +62,21 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
   function addFiles(fileList) {
     const problems = [];
     const accepted = [];
-    let room = MAX_IMAGES - kept.length - newItems.length;
+    let room = MAX_MEDIA_FILES - kept.length - newItems.length;
     for (const file of Array.from(fileList)) {
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        problems.push(`${file.name}: use JPG, PNG or WebP`);
-        continue;
-      }
-      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-        problems.push(`${file.name}: larger than ${MAX_IMAGE_SIZE_MB} MB`);
+      const check = validateMediaFile(file);
+      if (check.error) {
+        problems.push(check.error);
         continue;
       }
       if (room <= 0) {
-        problems.push(`You can add up to ${MAX_IMAGES} images`);
+        problems.push(`You can add up to ${MAX_MEDIA_FILES} files per property.`);
         break;
       }
-      accepted.push({ id: crypto.randomUUID(), file, preview: URL.createObjectURL(file) });
+      accepted.push({ id: crypto.randomUUID(), file, mime: check.mime, kind: check.kind, preview: URL.createObjectURL(file) });
       room--;
     }
-    setImageError(problems.join(". "));
+    setMediaError(problems.join(" "));
     if (accepted.length) setNewItems((prev) => [...prev, ...accepted]);
   }
 
@@ -81,7 +88,7 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
     });
   }
 
-  const submit = handleSubmit((values) => onSubmit(values, { keptImages: kept, files: newItems.map((i) => i.file) }));
+  const submit = handleSubmit((values) => onSubmit(values, { keptMedia: kept, newItems }));
 
   return (
     <form onSubmit={submit} noValidate className="space-y-6">
@@ -99,6 +106,19 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
             {PROPERTY_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </Select>
         </FormField>
+        <FormField label="Number of Floors" htmlFor="numberOfFloors" error={errors.numberOfFloors?.message} hint="Whole number. Leave blank for plots.">
+          <Input id="numberOfFloors" type="number" min="0" max="200" step="1" inputMode="numeric" placeholder="e.g. 2" aria-invalid={!!errors.numberOfFloors} {...register("numberOfFloors")} />
+        </FormField>
+        <div className="flex items-start sm:pt-[26px]">
+          <ToggleField
+            control={control}
+            name="hasBoundary"
+            label="Property Boundary Available"
+            description="Boundary wall, fencing or clearly defined limits"
+            icon={Shield}
+            className="w-full"
+          />
+        </div>
       </Section>
 
       <Section title="Price and size">
@@ -118,9 +138,15 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
           <Textarea id="address" rows={3} placeholder="House / plot number, street, landmark, city, pincode" aria-invalid={!!errors.address} {...register("address")} />
         </FormField>
         <FormField label="Description" htmlFor="description" error={errors.description?.message} className="sm:col-span-2">
-          <Textarea id="description" rows={4} placeholder="Facing, floors, amenities, condition and anything a buyer should know" aria-invalid={!!errors.description} {...register("description")} />
+          <Textarea id="description" rows={4} placeholder="Facing, condition and anything a buyer should know" aria-invalid={!!errors.description} {...register("description")} />
         </FormField>
       </Section>
+
+      <LocationCapture register={register} errors={errors} watch={watch} setValue={setValue} />
+
+      <AmenitiesSection control={control} register={register} />
+
+      <NearbySection register={register} errors={errors} />
 
       <Section title="Owner and follow-up" description="Private notes for you. These are never shown publicly.">
         <FormField label="Owner name" htmlFor="ownerName" required error={errors.ownerName?.message}>
@@ -128,6 +154,9 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
         </FormField>
         <FormField label="Owner phone number" htmlFor="ownerPhone" error={errors.ownerPhone?.message}>
           <Input id="ownerPhone" type="tel" autoComplete="off" placeholder="+91 98765 43210" aria-invalid={!!errors.ownerPhone} {...register("ownerPhone")} />
+        </FormField>
+        <FormField label="Additional contact number" htmlFor="additionalContactNumber" error={errors.additionalContactNumber?.message} hint="Family member, broker or alternate number">
+          <Input id="additionalContactNumber" type="tel" autoComplete="off" placeholder="+91 91234 56789" aria-invalid={!!errors.additionalContactNumber} {...register("additionalContactNumber")} />
         </FormField>
         <FormField label="Last follow-up date" htmlFor="followUpDate" error={errors.followUpDate?.message}>
           <Input id="followUpDate" type="date" {...register("followUpDate")} />
@@ -139,18 +168,20 @@ export default function PropertyForm({ property, onSubmit, submitting, submitLab
 
       <Card>
         <CardHeader>
-          <CardTitle>Images</CardTitle>
-          <CardDescription>The first image is used as the cover. Images upload when you save.</CardDescription>
+          <CardTitle>Photos and videos</CardTitle>
+          <CardDescription>The first photo is used as the cover. Files upload when you save.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ImageUploader
+          <MediaUploader
             existing={kept}
             newItems={newItems}
             onAddFiles={addFiles}
-            onRemoveExisting={(url) => setKept((k) => k.filter((u) => u !== url))}
+            onRemoveExisting={(url) => setKept((k) => k.filter((m) => m.url !== url))}
             onRemoveNew={removeNew}
-            error={imageError}
+            error={mediaError}
             disabled={submitting}
+            uploading={submitting}
+            progress={uploadProgress}
           />
         </CardContent>
       </Card>

@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Building2, CalendarClock, MapPin, Pencil, Phone, Ruler, Trash2, User } from "lucide-react";
+import { ArrowLeft, Building2, CalendarClock, Layers, MapPin, Pencil, Phone, PhoneCall, Ruler, Shield, Trash2, User } from "lucide-react";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import EmptyState from "@/components/common/EmptyState";
 import ErrorState from "@/components/common/ErrorState";
 import StatusBadge from "@/components/common/StatusBadge";
-import ImageGallery from "@/components/property/ImageGallery";
+import AmenitiesCard from "@/components/property/AmenitiesCard";
+import LocationCard from "@/components/property/LocationCard";
+import MediaGallery from "@/components/property/MediaGallery";
+import NearbyCard from "@/components/property/NearbyCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +16,7 @@ import { useProperty } from "@/hooks/useProperty";
 import { useToast } from "@/hooks/useToast";
 import { getErrorMessage } from "@/lib/errors";
 import { formatArea, formatDate, formatPrice } from "@/lib/format";
+import { getMediaList } from "@/lib/media";
 import { deleteProperty } from "@/services/propertyService";
 
 function Info({ icon: Icon, label, children }) {
@@ -23,10 +27,15 @@ function Info({ icon: Icon, label, children }) {
       </div>
       <div className="min-w-0">
         <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-        <div className="text-sm font-medium break-words">{children}</div>
+        <div className="break-words text-sm font-medium">{children}</div>
       </div>
     </div>
   );
+}
+
+function PhoneLink({ number }) {
+  if (!number) return "—";
+  return <a href={`tel:${number.replace(/\s/g, "")}`} className="text-primary hover:underline">{number}</a>;
 }
 
 function followUpNote(date) {
@@ -77,6 +86,7 @@ export default function PropertyDetailsPage() {
   }
 
   const follow = followUpNote(property.follow_up_date);
+  const floors = property.number_of_floors;
 
   return (
     <>
@@ -104,7 +114,7 @@ export default function PropertyDetailsPage() {
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-3">
-          <ImageGallery images={property.images} title={property.title} />
+          <MediaGallery media={getMediaList(property)} title={property.title} />
           <Card>
             <CardHeader><CardTitle>Description</CardTitle></CardHeader>
             <CardContent>
@@ -115,6 +125,8 @@ export default function PropertyDetailsPage() {
               )}
             </CardContent>
           </Card>
+          <AmenitiesCard amenities={property.amenities} />
+          <NearbyCard facilities={property.nearby_facilities} />
         </div>
 
         <div className="space-y-6 lg:col-span-2">
@@ -126,17 +138,24 @@ export default function PropertyDetailsPage() {
               </div>
               <Info icon={Ruler} label="Area">{formatArea(property.area)}</Info>
               <Info icon={Building2} label="Property type">{property.property_type}</Info>
+              <Info icon={Layers} label="Number of floors">{floors === null || floors === undefined ? "—" : floors}</Info>
+              <Info icon={Shield} label="Property boundary available">
+                <span className={property.has_boundary ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}>
+                  {property.has_boundary ? "Yes" : "No"}
+                </span>
+              </Info>
               <Info icon={MapPin} label="Complete address">{property.address || "—"}</Info>
             </CardContent>
           </Card>
+
+          <LocationCard property={property} />
 
           <Card>
             <CardHeader><CardTitle>Owner and follow-up</CardTitle></CardHeader>
             <CardContent className="space-y-5">
               <Info icon={User} label="Owner name">{property.owner_name || "—"}</Info>
-              <Info icon={Phone} label="Owner phone">
-                {property.owner_phone ? <a href={`tel:${property.owner_phone.replace(/\s/g, "")}`} className="text-primary hover:underline">{property.owner_phone}</a> : "—"}
-              </Info>
+              <Info icon={Phone} label="Owner phone"><PhoneLink number={property.owner_phone} /></Info>
+              <Info icon={PhoneCall} label="Additional contact number"><PhoneLink number={property.additional_contact_number} /></Info>
               <Info icon={CalendarClock} label="Last follow-up">
                 {formatDate(property.follow_up_date)}
                 {follow && <span className={`ml-2 text-xs font-normal ${follow.className}`}>{follow.text}</span>}
@@ -156,7 +175,7 @@ export default function PropertyDetailsPage() {
       <ConfirmDialog
         open={confirmOpen}
         title="Delete this property?"
-        description={`"${property.title}" and its images will be permanently deleted. This can't be undone.`}
+        description={`"${property.title}" and all its photos and videos will be permanently deleted. This can't be undone.`}
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmOpen(false)}
